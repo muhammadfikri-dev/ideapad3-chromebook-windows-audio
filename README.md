@@ -1,6 +1,6 @@
 # 🎵 Driver Audio Lenovo IdeaPad 3 11IGL05 Chromebook (Windows 10 64-Bit)
 
-[![Build and Package Drivers](https://github.com/USERNAME/REPO_NAME/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/USERNAME/REPO_NAME/actions/workflows/build-and-release.yml)
+[![Build and Package Drivers](https://github.com/muhammadfikri-dev/ideapad3-chromebook-windows-audio/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/muhammadfikri-dev/ideapad3-chromebook-windows-audio/actions/workflows/build-and-release.yml)
 [![Platform](https://img.shields.io/badge/Platform-Intel%20Gemini%20Lake-blue.svg)](https://ark.intel.com)
 [![OS](https://img.shields.io/badge/OS-Windows%2010%20x64-0078D6.svg)](https://microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-GPL%20v2%20%2F%20MIT-brightgreen.svg)](LICENSE)
