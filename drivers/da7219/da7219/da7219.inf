@@ -16,7 +16,7 @@ Signature   = "$WINDOWS NT$"
 Class       = Media
 ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider    = CoolStar
-DriverVer   = 2/25/2022,1.0.0
+DriverVer   = 02/25/2022,1.0.0.0
 CatalogFile = da7219.cat
 PnpLockdown=1
 

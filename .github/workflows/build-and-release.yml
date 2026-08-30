@@ -172,23 +172,39 @@ jobs:
           # Copy Driver files
           # 1. sklhdaudbus
           Copy-Item "drivers\sklhdaudbus\sklhdaudbus\sklhdaudbus.inf" "$busDir\" -Force
-          $sklSys = Get-ChildItem -Path "drivers\sklhdaudbus" -Recurse -Filter "sklhdaudbus.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
-          if ($sklSys) { Copy-Item $sklSys.FullName "$busDir\" -Force }
+          $sklSys = Get-ChildItem -Path . -Recurse -Filter "sklhdaudbus.sys" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if (-not $sklSys) { $sklSys = Get-ChildItem -Path . -Recurse -Filter "sklhdaudbus.sys" -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          if ($sklSys) { 
+            Write-Host "Found sklhdaudbus.sys: $($sklSys.FullName)" -ForegroundColor Green
+            Copy-Item $sklSys.FullName "$busDir\" -Force 
+          }
 
           # 2. max98357a
           Copy-Item "drivers\max98357a\max98357a\max98357a.inf" "$ampDir\" -Force
-          $maxSys = Get-ChildItem -Path "drivers\max98357a" -Recurse -Filter "max98357a.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
-          if ($maxSys) { Copy-Item $maxSys.FullName "$ampDir\" -Force }
+          $maxSys = Get-ChildItem -Path . -Recurse -Filter "max98357a.sys" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if (-not $maxSys) { $maxSys = Get-ChildItem -Path . -Recurse -Filter "max98357a.sys" -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          if ($maxSys) { 
+            Write-Host "Found max98357a.sys: $($maxSys.FullName)" -ForegroundColor Green
+            Copy-Item $maxSys.FullName "$ampDir\" -Force 
+          }
 
           # 3. da7219
           Copy-Item "drivers\da7219\da7219\da7219.inf" "$da7219Dir\" -Force
-          $daSys = Get-ChildItem -Path "drivers\da7219" -Recurse -Filter "da7219.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
-          if ($daSys) { Copy-Item $daSys.FullName "$da7219Dir\" -Force }
+          $daSys = Get-ChildItem -Path . -Recurse -Filter "da7219.sys" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if (-not $daSys) { $daSys = Get-ChildItem -Path . -Recurse -Filter "da7219.sys" -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          if ($daSys) { 
+            Write-Host "Found da7219.sys: $($daSys.FullName)" -ForegroundColor Green
+            Copy-Item $daSys.FullName "$da7219Dir\" -Force 
+          }
 
           # 4. rt5682
           Copy-Item "drivers\rt5682\rt5682\rt5682.inf" "$rt5682Dir\" -Force
-          $rtSys = Get-ChildItem -Path "drivers\rt5682" -Recurse -Filter "rt5682.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
-          if ($rtSys) { Copy-Item $rtSys.FullName "$rt5682Dir\" -Force }
+          $rtSys = Get-ChildItem -Path . -Recurse -Filter "rt5682.sys" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if (-not $rtSys) { $rtSys = Get-ChildItem -Path . -Recurse -Filter "rt5682.sys" -ErrorAction SilentlyContinue | Select-Object -First 1 }
+          if ($rtSys) { 
+            Write-Host "Found rt5682.sys: $($rtSys.FullName)" -ForegroundColor Green
+            Copy-Item $rtSys.FullName "$rt5682Dir\" -Force 
+          }
 
           # Sign all .sys files
           $pfxFile = "build\Certificates\ChromebookAudioDriverTestCert.pfx"
@@ -199,19 +215,27 @@ jobs:
             foreach ($file in $sysFiles) {
               if ($signtool) {
                 Write-Host "Signing $($file.FullName)..." -ForegroundColor Cyan
-                & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $file.FullName
+                try {
+                  & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $file.FullName
+                } catch {
+                  & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 $file.FullName
+                }
               }
             }
 
             # Generate .cat files using Inf2Cat
             if ($inf2cat) {
               Write-Host "Generating catalog file for $dir..." -ForegroundColor Cyan
-              & $inf2cat /driver:$dir /os:10_X64,10_RS5_X64,10_19H1_X64
+              & $inf2cat /driver:$dir /os:10_X64,10_RS5_X64,10_19H1_X64 /verbose
               $catFiles = Get-ChildItem -Path $dir -Filter "*.cat"
               foreach ($cat in $catFiles) {
                 if ($signtool) {
                   Write-Host "Signing catalog $($cat.FullName)..." -ForegroundColor Cyan
-                  & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $cat.FullName
+                  try {
+                    & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $cat.FullName
+                  } catch {
+                    & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 $cat.FullName
+                  }
                 }
               }
             }

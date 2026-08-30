@@ -16,7 +16,7 @@ Signature   = "$WINDOWS NT$"
 Class       = System
 ClassGuid   = {4d36e97d-e325-11ce-bfc1-08002be10318}
 Provider    = CoolStar
-DriverVer   = 8/15/2022,1.0.0
+DriverVer   = 08/15/2022,1.0.0.0
 CatalogFile = sklhdaudbus.cat
 PnpLockdown = 1
 
@@ -45,11 +45,11 @@ PETrust=true
 ;*****************************************
 
 [Manufacturer]
-%StdMfg%=Standard,NT$ARCH$
+%StdMfg%=Standard,NTAMD64
 
 ; Decorated model section take precedence over undecorated 
 ; ones on XP and later.
-[Standard.NT$ARCH$]
+[Standard.NTAMD64]
 %SklHDAudBus.DeviceDesc%=SklHDAudBus_Device, PCI\VEN_8086&DEV_9D70&CC_0401 ;Intel Skylake
 %SklHDAudBus.DeviceDesc%=SklHDAudBus_Device, PCI\VEN_8086&DEV_9D71&CC_0401 ;Intel Kaby Lake
 %SklHDAudBus.DeviceDesc%=SklHDAudBus_Device, PCI\VEN_8086&DEV_5A98&CC_0401 ;Intel Apollo Lake

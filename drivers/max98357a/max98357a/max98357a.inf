@@ -16,7 +16,7 @@ Signature   = "$WINDOWS NT$"
 Class       = Media
 ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider    = CoolStar
-DriverVer   = 05/01/2022,1.0.3
+DriverVer   = 05/01/2022,1.0.3.0
 CatalogFile = max98357a.cat
 PnpLockdown = 1
 
@@ -36,11 +36,11 @@ max98357a.sys  = 1,,
 ;*****************************************
 
 [Manufacturer]
-%StdMfg%=Standard,NT$ARCH$
+%StdMfg%=Standard,NTAMD64
 
 ; Decorated model section take precedence over undecorated 
 ; ones on XP and later.
-[Standard.NT$ARCH$]
+[Standard.NTAMD64]
 %MAX98357A.DeviceDesc%=MAX98357A_Device, ACPI\MX98357A
 %MAX98357A.DeviceDesc%=MAX98357A_Device, ACPI\VEN_MX98&DEV_357A
 %MAX98360A.DeviceDesc%=MAX98357A_Device, ACPI\MX98360A
