@@ -46,8 +46,10 @@ Write-Host "`n[3/6] Memeriksa Layanan Windows Audio..." -ForegroundColor Cyan
 $audiosrv = Get-Service -Name "Audiosrv" -ErrorAction SilentlyContinue
 $endpoint = Get-Service -Name "AudioEndpointBuilder" -ErrorAction SilentlyContinue
 
-Write-Host "    Audiosrv             : $($audiosrv.Status)" -ForegroundColor (if ($audiosrv.Status -eq "Running") { "Green" } else { "Red" })
-Write-Host "    AudioEndpointBuilder : $($endpoint.Status)" -ForegroundColor (if ($endpoint.Status -eq "Running") { "Green" } else { "Red" })
+$audiosrvColor = if ($audiosrv -and $audiosrv.Status -eq "Running") { "Green" } else { "Red" }
+$endpointColor = if ($endpoint -and $endpoint.Status -eq "Running") { "Green" } else { "Red" }
+Write-Host "    Audiosrv             : $($audiosrv.Status)" -ForegroundColor $audiosrvColor
+Write-Host "    AudioEndpointBuilder : $($endpoint.Status)" -ForegroundColor $endpointColor
 $report += "[3] Audio Services: Audiosrv=$($audiosrv.Status), AudioEndpointBuilder=$($endpoint.Status)"
 
 # 4. Hardware ID Scan
