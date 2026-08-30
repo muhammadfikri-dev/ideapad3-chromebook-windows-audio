@@ -28,7 +28,7 @@ jobs:
       - name: Setup MSBuild Path
         uses: microsoft/setup-msbuild@v2
 
-      - name: Install Windows Driver Kit (WDK)
+      - name: Install and Configure Windows Driver Kit (WDK)
         shell: powershell
         run: |
           Write-Host "Checking for Windows Driver Kit (WDK)..." -ForegroundColor Cyan
@@ -45,6 +45,39 @@ jobs:
               $installerPath = "$env:TEMP\wdksetup.exe"
               Invoke-WebRequest -Uri $wdkUrl -OutFile $installerPath
               Start-Process -FilePath $installerPath -ArgumentList "/quiet", "/features", "OptionId.WindowsDriverKitComplete" -Wait -NoNewWindow
+            }
+          }
+
+          Write-Host "Configuring WDK MSBuild Tasks and Visual Studio Integration..." -ForegroundColor Cyan
+          $vsixFiles = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\Vsix" -Recurse -Filter "*.vsix" -ErrorAction SilentlyContinue
+          foreach ($vsix in $vsixFiles) {
+            Write-Host "Found VSIX: $($vsix.FullName)" -ForegroundColor Green
+            $extractPath = "$env:TEMP\WDK_VSIX_$($vsix.BaseName)"
+            Expand-Archive -Path $vsix.FullName -DestinationPath $extractPath -Force
+
+            # Copy to Windows Kits build directory
+            $kitBuildDirs = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\build" -Directory -ErrorAction SilentlyContinue
+            foreach ($kDir in $kitBuildDirs) {
+              $binDir = "$($kDir.FullName)\bin"
+              New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+              Copy-Item -Recurse -Force "$extractPath\*" "$binDir\"
+              Copy-Item -Recurse -Force "$extractPath\*" "$($kDir.FullName)\"
+
+              # Fix missing task dll versions for newer MSBuild
+              $dll17 = "$binDir\Microsoft.DriverKit.Build.Tasks.17.0.dll"
+              $dll18 = "$binDir\Microsoft.DriverKit.Build.Tasks.18.0.dll"
+              if ((Test-Path $dll17) -and (-not (Test-Path $dll18))) {
+                Copy-Item $dll17 $dll18 -Force
+                Write-Host "Copied $dll17 to $dll18" -ForegroundColor Green
+              }
+            }
+
+            # Copy to Visual Studio MSBuild directory
+            $vsRoots = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "MSBuild" -Directory -ErrorAction SilentlyContinue
+            foreach ($vsRoot in $vsRoots) {
+              $ntDir = "$($vsRoot.FullName)\Microsoft\Windows NT\v10.0"
+              New-Item -ItemType Directory -Force -Path $ntDir | Out-Null
+              Copy-Item -Recurse -Force "$extractPath\*" "$ntDir\"
             }
           }
 
