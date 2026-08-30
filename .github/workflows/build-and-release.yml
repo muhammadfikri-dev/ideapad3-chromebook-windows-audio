@@ -244,6 +244,8 @@ jobs:
           # Copy Installation & Troubleshooting Scripts
           Copy-Item "scripts\Install-Audio-Drivers.bat" "$distRoot\" -Force
           Copy-Item "scripts\Install-Audio-Drivers.ps1" "$distRoot\" -Force
+          Copy-Item "scripts\Fix-Audio-Restart-Issue.bat" "$distRoot\" -Force
+          Copy-Item "scripts\Fix-Audio-Restart-Issue.ps1" "$distRoot\" -Force
           Copy-Item "scripts\Enable-TestSigning.bat" "$distRoot\" -Force
           Copy-Item "scripts\Disable-TestSigning.bat" "$distRoot\" -Force
           Copy-Item "scripts\Troubleshoot-Audio.ps1" "$distRoot\" -Force

@@ -31,25 +31,30 @@ if (-not (Test-Administrator)) {
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ------------------------------------------------------------------------
-# 1. Enable Windows Test Signing & Disable Integrity Checks (Required for custom drivers)
+# 1. Enable Windows Test Signing & Disable Fast Startup (Required for Chromebooks)
 # ------------------------------------------------------------------------
-Write-Host "`n[1/5] Memeriksa status Windows TestSigning..." -ForegroundColor Cyan
+Write-Host "`n[1/6] Mengonfigurasi BCD (TestSigning, NoIntegrityChecks) & Fast Startup..." -ForegroundColor Cyan
 try {
-    $bcdOutput = bcdedit | Out-String
-    $testSigningEnabled = $bcdOutput -match "testsigning\s+Yes"
-    
-    if (-not $testSigningEnabled) {
-        Write-Host "    [*] Mengaktifkan Windows TestSigning & NoIntegrityChecks..." -ForegroundColor Yellow
-        & bcdedit /set testsigning on | Out-Null
-        & bcdedit /set nointegritychecks on | Out-Null
-        Write-Host "    [V] TestSigning berhasil diaktifkan." -ForegroundColor Green
-        $requiresRebootForTestSigning = $true
-    } else {
-        Write-Host "    [V] Windows TestSigning sudah aktif." -ForegroundColor Green
-        $requiresRebootForTestSigning = $false
+    Write-Host "    [*] Mengaktifkan TestSigning & NoIntegrityChecks pada BCD..." -ForegroundColor Yellow
+    & bcdedit /set {default} testsigning on | Out-Null
+    & bcdedit /set {current} testsigning on | Out-Null
+    & bcdedit /set {bootmgr} testsigning on | Out-Null
+    & bcdedit /set {default} nointegritychecks on | Out-Null
+    & bcdedit /set {current} nointegritychecks on | Out-Null
+    & bcdedit /set {default} loadoptions DDISABLE_INTEGRITY_CHECKS | Out-Null
+    & bcdedit /set {current} loadoptions DDISABLE_INTEGRITY_CHECKS | Out-Null
+    Write-Host "    [V] BCD TestSigning & Integritas Driver berhasil diaktifkan secara permanen." -ForegroundColor Green
+
+    # Matikan Windows Fast Startup (Penyebab utama driver audio I2S gagal inisialisasi saat reboot)
+    Write-Host "    [*] Menonaktifkan Windows Fast Startup (Hiberboot)..." -ForegroundColor Yellow
+    & powercfg /h off | Out-Null
+    if (-not (Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power")) {
+        New-Item -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Force | Out-Null
     }
+    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power" -Name "HiberbootEnabled" -Value 0 -Type DWord -Force | Out-Null
+    Write-Host "    [V] Fast Startup berhasil dinonaktifkan (mencegah audio hilang saat restart)." -ForegroundColor Green
 } catch {
-    Write-Host "    [!] Peringatan saat memeriksa bcdedit: $_" -ForegroundColor Yellow
+    Write-Host "    [!] Peringatan saat mengonfigurasi BCD/Power: $_" -ForegroundColor Yellow
 }
 
 # ------------------------------------------------------------------------
@@ -151,7 +156,7 @@ if ($sortedInfs.Count -eq 0) {
 # ------------------------------------------------------------------------
 # 4. Restart Windows Audio Services
 # ------------------------------------------------------------------------
-Write-Host "`n[4/5] Merestart Layanan Windows Audio..." -ForegroundColor Cyan
+Write-Host "`n[4/6] Merestart Layanan Windows Audio..." -ForegroundColor Cyan
 try {
     Restart-Service -Name "Audiosrv" -Force -ErrorAction SilentlyContinue
     Restart-Service -Name "AudioEndpointBuilder" -Force -ErrorAction SilentlyContinue
@@ -161,9 +166,21 @@ try {
 }
 
 # ------------------------------------------------------------------------
-# 5. Device Status Check & Diagnostics
+# 5. Pasang Tugas Otomatis Inisialisasi Audio saat Boot / Logon
 # ------------------------------------------------------------------------
-Write-Host "`n[5/5] Memeriksa Status Perangkat Audio di Device Manager..." -ForegroundColor Cyan
+Write-Host "`n[5/6] Mendaftarkan Tugas Otomatis Audio Keep-Alive (Persistence)..." -ForegroundColor Cyan
+try {
+    $startupFixCmd = 'powershell.exe -WindowStyle Hidden -Command "Start-Sleep -Seconds 3; Restart-Service -Name Audiosrv,AudioEndpointBuilder -Force"'
+    & schtasks.exe /create /tn "ChromebookAudioStartupFix" /tr $startupFixCmd /sc ONLOGON /rl HIGHEST /f | Out-Null
+    Write-Host "    [V] Tugas otomatis boot/logon terdaftar (suara akan langsung aktif setiap kali laptop dinyalakan/direstart)." -ForegroundColor Green
+} catch {
+    Write-Host "    [!] Peringatan saat mendaftarkan tugas otomatis: $_" -ForegroundColor Yellow
+}
+
+# ------------------------------------------------------------------------
+# 6. Device Status Check & Diagnostics
+# ------------------------------------------------------------------------
+Write-Host "`n[6/6] Memeriksa Status Perangkat Audio di Device Manager..." -ForegroundColor Cyan
 
 $audioDevices = Get-PnpDevice -Class Media, System -ErrorAction SilentlyContinue | Where-Object {
     $_.FriendlyName -like "*Audio*" -or 

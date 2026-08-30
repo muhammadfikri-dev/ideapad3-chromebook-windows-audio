@@ -103,6 +103,16 @@ Setelah laptop menyala kembali:
 - Cari kategori **System devices** dan pastikan **Maxim 98357a I2S Amplifier** berstatus "This device is working properly".
 - Jika belum, klik kanan -> **Update driver** -> **Browse my computer for drivers** -> arahkan ke folder `02-Maxim-Speaker-Amp`.
 
+### Masalah 4: Audio berfungsi normal, tetapi bertanda silang (X) lagi setiap kali laptop di-restart
+- **Penyebab:** Pada Chromebook Windows (Gemini Lake), fitur *Fast Startup (Hiberboot)* di Windows membekukan memori kernel saat shutdown/restart, sehingga chip audio I2S gagal menginisialisasi daya (D3->D0 power cycle).
+- **Solusi Cepat 1-Klik:**
+  1. Klik kanan pada file **`Fix-Audio-Restart-Issue.bat`** -> pilih **"Run as Administrator"**.
+  2. Skrip ini akan secara otomatis:
+     - Mengunci `TestSigning` dan `NoIntegrityChecks` secara permanen pada BCD boot loader.
+     - Menonaktifkan *Fast Startup* (`powercfg /h off`).
+     - Mendaftarkan tugas otomatis (*Audio Startup Fix*) yang langsung merefresh layanan audio setiap kali laptop dinyalakan/direstart.
+  3. Setelah menjalankan file tersebut, audio Anda akan **tetap aktif dan berfungsi normal secara permanen** setiap kali laptop dinyalakan atau direstart!
+
 ---
 
 ## 📞 Ringkasan Perintah Penting (Manual via CMD/PowerShell Admin)
