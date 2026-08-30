@@ -1,0 +1,241 @@
+name: Build and Package Lenovo IdeaPad 3 11IGL05 Audio Drivers
+
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Release Version Tag (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Package Audio Drivers (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSBuild Path
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Install Windows Driver Kit (WDK)
+        shell: powershell
+        run: |
+          Write-Host "Checking for Windows Driver Kit (WDK)..." -ForegroundColor Cyan
+          $wdkPath = "C:\Program Files (x86)\Windows Kits\10\Include\wdf"
+          if (Test-Path $wdkPath) {
+            Write-Host "WDK is already available at $wdkPath" -ForegroundColor Green
+          } else {
+            Write-Host "Installing Windows Driver Kit via winget..." -ForegroundColor Yellow
+            try {
+              winget install --id Microsoft.WindowsWDK.10.0.26100 --exact --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+            } catch {
+              Write-Host "Winget failed or timed out, trying manual WDK setup fallback..." -ForegroundColor Yellow
+              $wdkUrl = "https://go.microsoft.com/fwlink/?linkid=2196230"
+              $installerPath = "$env:TEMP\wdksetup.exe"
+              Invoke-WebRequest -Uri $wdkUrl -OutFile $installerPath
+              Start-Process -FilePath $installerPath -ArgumentList "/quiet", "/features", "OptionId.WindowsDriverKitComplete" -Wait -NoNewWindow
+            }
+          }
+
+      - name: Create Self-Signed Code Signing Certificate
+        shell: powershell
+        run: |
+          Write-Host "Generating Code Signing Certificate for Driver Signing..." -ForegroundColor Cyan
+          $certName = "ChromebookAudioDriverTestCert"
+          $certDir = "build\Certificates"
+          New-Item -ItemType Directory -Force -Path $certDir | Out-Null
+
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert `
+                    -Subject "CN=Chromebook Audio Driver Signing (Lenovo IdeaPad 3)" `
+                    -KeySpec Signature `
+                    -KeyLength 2048 `
+                    -KeyAlgorithm RSA `
+                    -HashAlgorithm SHA256 `
+                    -CertStoreLocation "Cert:\CurrentUser\My" `
+                    -NotAfter (Get-Date).AddYears(10)
+
+          # Export Public CER
+          Export-Certificate -Cert $cert -FilePath "$certDir\$certName.cer" | Out-Null
+
+          # Export PFX with password
+          $pfxPassword = ConvertTo-SecureString -String "Password123!" -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath "$certDir\$certName.pfx" -Password $pfxPassword | Out-Null
+
+          # Install into LocalMachine Root & TrustedPublisher
+          Import-Certificate -FilePath "$certDir\$certName.cer" -CertStoreLocation "Cert:\LocalMachine\Root" | Out-Null
+          Import-Certificate -FilePath "$certDir\$certName.cer" -CertStoreLocation "Cert:\LocalMachine\TrustedPublisher" | Out-Null
+
+          Write-Host "Certificate created and imported successfully: $certDir\$certName.cer" -ForegroundColor Green
+
+      - name: Build Drivers Solution (Release x64)
+        shell: powershell
+        run: |
+          Write-Host "Building IdeaPad3AudioDrivers.sln (Release|x64)..." -ForegroundColor Cyan
+          msbuild IdeaPad3AudioDrivers.sln `
+            /p:Configuration=Release `
+            /p:Platform=x64 `
+            /p:TargetVersion=Windows10 `
+            /p:SignMode=TestSign `
+            /m `
+            /verbosity:minimal
+
+      - name: Sign Binaries and Package Drivers
+        shell: powershell
+        run: |
+          Write-Host "Locating SignTool and Inf2Cat..." -ForegroundColor Cyan
+          $kitsRoot = "C:\Program Files (x86)\Windows Kits\10\bin"
+          $signtool = Get-ChildItem -Path $kitsRoot -Recurse -Filter "signtool.exe" | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
+          $inf2cat = Get-ChildItem -Path $kitsRoot -Recurse -Filter "Inf2Cat.exe" | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
+
+          if (-not $signtool) {
+            $signtool = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "signtool.exe" | Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          Write-Host "SignTool Path: $signtool" -ForegroundColor Green
+          Write-Host "Inf2Cat Path: $inf2cat" -ForegroundColor Green
+
+          $distRoot = "dist\Lenovo-IdeaPad3-11IGL05-Audio-Drivers-x64"
+          $busDir = "$distRoot\01-Intel-HD-Audio-Bus"
+          $ampDir = "$distRoot\02-Maxim-Speaker-Amp"
+          $da7219Dir = "$distRoot\03-DA7219-Headphone-Mic"
+          $rt5682Dir = "$distRoot\04-RT5682-Headphone-Mic"
+          $certTargetDir = "$distRoot\Certificates"
+
+          New-Item -ItemType Directory -Force -Path $busDir, $ampDir, $da7219Dir, $rt5682Dir, $certTargetDir | Out-Null
+
+          # Copy Certificates
+          Copy-Item "build\Certificates\ChromebookAudioDriverTestCert.cer" "$certTargetDir\" -Force
+
+          # Copy Driver files
+          # 1. sklhdaudbus
+          Copy-Item "drivers\sklhdaudbus\sklhdaudbus\sklhdaudbus.inf" "$busDir\" -Force
+          $sklSys = Get-ChildItem -Path "drivers\sklhdaudbus" -Recurse -Filter "sklhdaudbus.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if ($sklSys) { Copy-Item $sklSys.FullName "$busDir\" -Force }
+
+          # 2. max98357a
+          Copy-Item "drivers\max98357a\max98357a\max98357a.inf" "$ampDir\" -Force
+          $maxSys = Get-ChildItem -Path "drivers\max98357a" -Recurse -Filter "max98357a.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if ($maxSys) { Copy-Item $maxSys.FullName "$ampDir\" -Force }
+
+          # 3. da7219
+          Copy-Item "drivers\da7219\da7219\da7219.inf" "$da7219Dir\" -Force
+          $daSys = Get-ChildItem -Path "drivers\da7219" -Recurse -Filter "da7219.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if ($daSys) { Copy-Item $daSys.FullName "$da7219Dir\" -Force }
+
+          # 4. rt5682
+          Copy-Item "drivers\rt5682\rt5682\rt5682.inf" "$rt5682Dir\" -Force
+          $rtSys = Get-ChildItem -Path "drivers\rt5682" -Recurse -Filter "rt5682.sys" | Where-Object { $_.FullName -like "*x64*" -and $_.FullName -like "*Release*" } | Select-Object -First 1
+          if ($rtSys) { Copy-Item $rtSys.FullName "$rt5682Dir\" -Force }
+
+          # Sign all .sys files
+          $pfxFile = "build\Certificates\ChromebookAudioDriverTestCert.pfx"
+          $driverDirs = @($busDir, $ampDir, $da7219Dir, $rt5682Dir)
+
+          foreach ($dir in $driverDirs) {
+            $sysFiles = Get-ChildItem -Path $dir -Filter "*.sys"
+            foreach ($file in $sysFiles) {
+              if ($signtool) {
+                Write-Host "Signing $($file.FullName)..." -ForegroundColor Cyan
+                & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $file.FullName
+              }
+            }
+
+            # Generate .cat files using Inf2Cat
+            if ($inf2cat) {
+              Write-Host "Generating catalog file for $dir..." -ForegroundColor Cyan
+              & $inf2cat /driver:$dir /os:10_X64,10_RS5_X64,10_19H1_X64
+              $catFiles = Get-ChildItem -Path $dir -Filter "*.cat"
+              foreach ($cat in $catFiles) {
+                if ($signtool) {
+                  Write-Host "Signing catalog $($cat.FullName)..." -ForegroundColor Cyan
+                  & $signtool sign /f $pfxFile /p "Password123!" /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 $cat.FullName
+                }
+              }
+            }
+          }
+
+          # Copy Installation & Troubleshooting Scripts
+          Copy-Item "scripts\Install-Audio-Drivers.bat" "$distRoot\" -Force
+          Copy-Item "scripts\Install-Audio-Drivers.ps1" "$distRoot\" -Force
+          Copy-Item "scripts\Enable-TestSigning.bat" "$distRoot\" -Force
+          Copy-Item "scripts\Disable-TestSigning.bat" "$distRoot\" -Force
+          Copy-Item "scripts\Troubleshoot-Audio.ps1" "$distRoot\" -Force
+          Copy-Item "PANDUAN_INSTALASI.md" "$distRoot\" -Force
+
+          # Create Readme for Distribution
+          @"
+========================================================================
+LENOVO IDEAPAD 3 11IGL05 CHROMEBOOK AUDIO DRIVER PACK (WINDOWS 10 x64)
+========================================================================
+Platform: Intel Gemini Lake Refresh (Celeron N4020)
+Board: LICK / Octopus Family
+Architecture: Windows 10 64-bit
+
+CARA INSTALASI MUDAH:
+1. Klik kanan pada 'Install-Audio-Drivers.bat' lalu pilih 'Run as Administrator'.
+2. Skrip akan secara otomatis:
+   - Mengaktifkan Windows TestSigning Mode.
+   - Menginstal Sertifikat Digital Driver.
+   - Memasang driver Intel HD Audio Controller (sklhdaudbus).
+   - Memasang driver Maxim Speaker Amplifier (max98357a).
+   - Memasang driver Headphone/Microphone Codec (da7219 / rt5682).
+   - Merestart Audio Service Windows.
+3. Restart laptop Chromebook Anda untuk menerapkan perubahan.
+
+Baca file 'PANDUAN_INSTALASI.md' untuk instruksi troubleshooting lengkap.
+========================================================================
+"@ | Out-File -FilePath "$distRoot\README.txt" -Encoding utf8
+
+          # Create ZIP Archive
+          Write-Host "Compressing driver package to ZIP..." -ForegroundColor Green
+          $zipPath = "dist\Lenovo-IdeaPad3-11IGL05-Audio-Drivers-x64.zip"
+          Compress-Archive -Path "$distRoot\*" -DestinationPath $zipPath -Force
+          Write-Host "ZIP Created: $zipPath" -ForegroundColor Green
+
+      - name: Upload Driver Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lenovo-IdeaPad3-11IGL05-Audio-Drivers-x64
+          path: dist/Lenovo-IdeaPad3-11IGL05-Audio-Drivers-x64.zip
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Lenovo IdeaPad 3 11IGL05 Audio Driver ${{ github.ref_name || inputs.version_tag }}"
+          tag_name: ${{ github.ref_name || inputs.version_tag }}
+          draft: false
+          prerelease: false
+          files: dist/Lenovo-IdeaPad3-11IGL05-Audio-Drivers-x64.zip
+          body: |
+            ## 🎵 Lenovo IdeaPad 3 11IGL05 Chromebook Windows 10 64-bit Audio Drivers
+
+            Paket driver audio resmi dan lengkap untuk Chromebook **Lenovo IdeaPad 3 11IGL05** (Board: **LICK**, Baseboard: **Octopus**, CPU: **Intel Celeron N4020 / Gemini Lake Refresh**) yang menjalankan **Windows 10 64-bit**.
+
+            ### 📦 Isi Paket Driver:
+            1. **Intel HD Audio & DSP Bus Driver (`sklhdaudbus`)**: Menghubungkan Intel Gemini Lake Audio Controller (`PCI\VEN_8086&DEV_3198`).
+            2. **Maxim 98357A I2S Amplifier Driver (`max98357a`)**: Menghidupkan Speaker Internal Laptop Stereo (`ACPI\MX98357A`).
+            3. **Dialog Semiconductor 7219 Codec Driver (`da7219`)**: Mengaktifkan Headphone Jack 3.5mm & Headset Microphone (`ACPI\DLGS7219`).
+            4. **Realtek ALC5682 Codec Driver (`rt5682`)**: Dukungan untuk varian motherboard dengan Realtek Codec (`ACPI\10EC5682`).
+            5. **Script Installer Otomatis (`Install-Audio-Drivers.bat` & `.ps1`)**: Instalasi 1-klik dengan aktivasi sertifikat otomatis.
+
+            ### 🚀 Cara Penggunaan:
+            1. Unduh file `Lenovo-IdeaPad3-11IGL05-Audio-Drivers-x64.zip` di bawah.
+            2. Ekstrak file zip tersebut di Chromebook Windows Anda.
+            3. Klik kanan `Install-Audio-Drivers.bat` -> **Run as Administrator**.
+            4. Restart laptop Chromebook Anda.
+            5. Suara speaker laptop dan headphone akan berfungsi normal!
