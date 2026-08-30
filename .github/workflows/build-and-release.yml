@@ -48,46 +48,27 @@ jobs:
             }
           }
 
-          Write-Host "Searching and configuring WDK MSBuild Task DLLs..." -ForegroundColor Cyan
-          $searchPaths = @(
-            "C:\Program Files (x86)\Windows Kits",
-            "C:\Program Files\Microsoft Visual Studio",
-            "C:\Program Files (x86)\Microsoft Visual Studio"
-          )
-
-          $taskDlls = @()
-          foreach ($sp in $searchPaths) {
-            if (Test-Path $sp) {
-              $found = Get-ChildItem -Path $sp -Recurse -Filter "Microsoft.DriverKit.Build.Tasks*.dll" -ErrorAction SilentlyContinue
-              $taskDlls += $found
+          Write-Host "Configuring WDK MSBuild Task DLL aliases..." -ForegroundColor Cyan
+          $binDir = "C:\Program Files (x86)\Windows Kits\10\build\10.0.26100.0\bin"
+          if (Test-Path $binDir) {
+            $dll17 = "$binDir\Microsoft.DriverKit.Build.Tasks.17.0.dll"
+            $dll18 = "$binDir\Microsoft.DriverKit.Build.Tasks.18.0.dll"
+            if (Test-Path $dll17) {
+              Copy-Item $dll17 $dll18 -Force
+              Write-Host "Created $dll18 from $dll17" -ForegroundColor Green
             }
-          }
-          foreach ($dll in $taskDlls) {
-            Write-Host "Found Task DLL: $($dll.FullName)" -ForegroundColor Green
-          }
 
-          $targetDirs = @(
-            "C:\Program Files (x86)\Windows Kits\10\build\10.0.26100.0\bin",
-            "C:\Program Files (x86)\Windows Kits\10\build\bin",
-            "C:\Program Files (x86)\Windows Kits\10\build\10.0.22621.0\bin",
-            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\Windows NT\v10.0",
-            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\Windows NT\v10.0\bin",
-            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin"
-          )
+            $ver17 = "$binDir\Microsoft.DriverKit.Build.Tasks.PackageVerifier.17.0.dll"
+            $ver18 = "$binDir\Microsoft.DriverKit.Build.Tasks.PackageVerifier.18.0.dll"
+            if (Test-Path $ver17) {
+              Copy-Item $ver17 $ver18 -Force
+              Write-Host "Created $ver18 from $ver17" -ForegroundColor Green
+            }
 
-          foreach ($tDir in $targetDirs) {
-            New-Item -ItemType Directory -Force -Path $tDir | Out-Null
-            foreach ($dll in $taskDlls) {
-              Copy-Item -Force $dll.FullName "$tDir\"
-            }
-            $anyDll = Get-ChildItem -Path $tDir -Filter "Microsoft.DriverKit.Build.Tasks*.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($anyDll) {
-              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.18.0.dll"
-              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.17.0.dll"
-              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.16.0.dll"
-              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.dll"
-              Write-Host "Configured MSBuild Task DLL aliases in $tDir" -ForegroundColor Green
-            }
+            $vsMSBuildDir = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\Windows NT\v10.0"
+            New-Item -ItemType Directory -Force -Path $vsMSBuildDir | Out-Null
+            Copy-Item -Recurse -Force "$binDir\*" "$vsMSBuildDir\"
+            Write-Host "Copied WDK build tasks to $vsMSBuildDir" -ForegroundColor Green
           }
 
       - name: Create Self-Signed Code Signing Certificate
