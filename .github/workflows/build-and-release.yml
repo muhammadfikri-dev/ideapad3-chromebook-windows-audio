@@ -49,9 +49,21 @@ jobs:
           }
 
           Write-Host "Searching and configuring WDK MSBuild Task DLLs..." -ForegroundColor Cyan
-          $taskDlls = Get-ChildItem -Path "C:\" -Recurse -Filter "Microsoft.DriverKit.Build.Tasks*.dll" -ErrorAction SilentlyContinue
+          $searchPaths = @(
+            "C:\Program Files (x86)\Windows Kits",
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio"
+          )
+
+          $taskDlls = @()
+          foreach ($sp in $searchPaths) {
+            if (Test-Path $sp) {
+              $found = Get-ChildItem -Path $sp -Recurse -Filter "Microsoft.DriverKit.Build.Tasks*.dll" -ErrorAction SilentlyContinue
+              $taskDlls += $found
+            }
+          }
           foreach ($dll in $taskDlls) {
-            Write-Host "Found: $($dll.FullName)" -ForegroundColor Green
+            Write-Host "Found Task DLL: $($dll.FullName)" -ForegroundColor Green
           }
 
           $targetDirs = @(
@@ -68,13 +80,13 @@ jobs:
             foreach ($dll in $taskDlls) {
               Copy-Item -Force $dll.FullName "$tDir\"
             }
-            $anyDll = Get-ChildItem -Path $tDir -Filter "Microsoft.DriverKit.Build.Tasks*.dll" | Select-Object -First 1
+            $anyDll = Get-ChildItem -Path $tDir -Filter "Microsoft.DriverKit.Build.Tasks*.dll" -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($anyDll) {
               Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.18.0.dll"
               Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.17.0.dll"
               Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.16.0.dll"
               Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.dll"
-              Write-Host "Created MSBuild Task DLL aliases in $tDir" -ForegroundColor Green
+              Write-Host "Configured MSBuild Task DLL aliases in $tDir" -ForegroundColor Green
             }
           }
 
