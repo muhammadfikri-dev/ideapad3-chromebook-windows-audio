@@ -48,36 +48,33 @@ jobs:
             }
           }
 
-          Write-Host "Configuring WDK MSBuild Tasks and Visual Studio Integration..." -ForegroundColor Cyan
-          $vsixFiles = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\Vsix" -Recurse -Filter "*.vsix" -ErrorAction SilentlyContinue
-          foreach ($vsix in $vsixFiles) {
-            Write-Host "Found VSIX: $($vsix.FullName)" -ForegroundColor Green
-            $extractPath = "$env:TEMP\WDK_VSIX_$($vsix.BaseName)"
-            Expand-Archive -Path $vsix.FullName -DestinationPath $extractPath -Force
+          Write-Host "Searching and configuring WDK MSBuild Task DLLs..." -ForegroundColor Cyan
+          $taskDlls = Get-ChildItem -Path "C:\" -Recurse -Filter "Microsoft.DriverKit.Build.Tasks*.dll" -ErrorAction SilentlyContinue
+          foreach ($dll in $taskDlls) {
+            Write-Host "Found: $($dll.FullName)" -ForegroundColor Green
+          }
 
-            # Copy to Windows Kits build directory
-            $kitBuildDirs = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\build" -Directory -ErrorAction SilentlyContinue
-            foreach ($kDir in $kitBuildDirs) {
-              $binDir = "$($kDir.FullName)\bin"
-              New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-              Copy-Item -Recurse -Force "$extractPath\*" "$binDir\"
-              Copy-Item -Recurse -Force "$extractPath\*" "$($kDir.FullName)\"
+          $targetDirs = @(
+            "C:\Program Files (x86)\Windows Kits\10\build\10.0.26100.0\bin",
+            "C:\Program Files (x86)\Windows Kits\10\build\bin",
+            "C:\Program Files (x86)\Windows Kits\10\build\10.0.22621.0\bin",
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\Windows NT\v10.0",
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Microsoft\Windows NT\v10.0\bin",
+            "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin"
+          )
 
-              # Fix missing task dll versions for newer MSBuild
-              $dll17 = "$binDir\Microsoft.DriverKit.Build.Tasks.17.0.dll"
-              $dll18 = "$binDir\Microsoft.DriverKit.Build.Tasks.18.0.dll"
-              if ((Test-Path $dll17) -and (-not (Test-Path $dll18))) {
-                Copy-Item $dll17 $dll18 -Force
-                Write-Host "Copied $dll17 to $dll18" -ForegroundColor Green
-              }
+          foreach ($tDir in $targetDirs) {
+            New-Item -ItemType Directory -Force -Path $tDir | Out-Null
+            foreach ($dll in $taskDlls) {
+              Copy-Item -Force $dll.FullName "$tDir\"
             }
-
-            # Copy to Visual Studio MSBuild directory
-            $vsRoots = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "MSBuild" -Directory -ErrorAction SilentlyContinue
-            foreach ($vsRoot in $vsRoots) {
-              $ntDir = "$($vsRoot.FullName)\Microsoft\Windows NT\v10.0"
-              New-Item -ItemType Directory -Force -Path $ntDir | Out-Null
-              Copy-Item -Recurse -Force "$extractPath\*" "$ntDir\"
+            $anyDll = Get-ChildItem -Path $tDir -Filter "Microsoft.DriverKit.Build.Tasks*.dll" | Select-Object -First 1
+            if ($anyDll) {
+              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.18.0.dll"
+              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.17.0.dll"
+              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.16.0.dll"
+              Copy-Item -Force $anyDll.FullName "$tDir\Microsoft.DriverKit.Build.Tasks.dll"
+              Write-Host "Created MSBuild Task DLL aliases in $tDir" -ForegroundColor Green
             }
           }
 
@@ -114,8 +111,15 @@ jobs:
       - name: Build Drivers Solution (Release x64)
         shell: powershell
         run: |
+          Write-Host "Locating VS2022 MSBuild..." -ForegroundColor Cyan
+          $msBuildExe = "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
+          if (-not (Test-Path $msBuildExe)) {
+            $msBuildExe = (Get-Command msbuild).Source
+          }
+          Write-Host "Using MSBuild: $msBuildExe" -ForegroundColor Green
+
           Write-Host "Building IdeaPad3AudioDrivers.sln (Release|x64)..." -ForegroundColor Cyan
-          msbuild IdeaPad3AudioDrivers.sln `
+          & "$msBuildExe" IdeaPad3AudioDrivers.sln `
             /p:Configuration=Release `
             /p:Platform=x64 `
             /p:TargetVersion=Windows10 `
