@@ -96,12 +96,34 @@ jobs:
         shell: powershell
         run: |
           Write-Host "Locating SignTool and Inf2Cat..." -ForegroundColor Cyan
-          $kitsRoot = "C:\Program Files (x86)\Windows Kits\10\bin"
-          $signtool = Get-ChildItem -Path $kitsRoot -Recurse -Filter "signtool.exe" | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
-          $inf2cat = Get-ChildItem -Path $kitsRoot -Recurse -Filter "Inf2Cat.exe" | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1 -ExpandProperty FullName
+          $searchRoots = @(
+            "C:\Program Files (x86)\Windows Kits\10\bin",
+            "C:\Program Files (x86)\Windows Kits",
+            "C:\Program Files\Microsoft Visual Studio",
+            "C:\Program Files (x86)\Microsoft Visual Studio"
+          )
 
-          if (-not $signtool) {
-            $signtool = Get-ChildItem -Path "C:\Program Files\Microsoft Visual Studio" -Recurse -Filter "signtool.exe" | Select-Object -First 1 -ExpandProperty FullName
+          $signtool = $null
+          $inf2cat = $null
+
+          foreach ($root in $searchRoots) {
+            if (Test-Path $root) {
+              if (-not $signtool) {
+                $st = Get-ChildItem -Path $root -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
+                if (-not $st) {
+                  $st = Get-ChildItem -Path $root -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+                }
+                if ($st) { $signtool = $st.FullName }
+              }
+
+              if (-not $inf2cat) {
+                $ic = Get-ChildItem -Path $root -Recurse -Filter "Inf2Cat.exe" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*x64*" } | Select-Object -First 1
+                if (-not $ic) {
+                  $ic = Get-ChildItem -Path $root -Recurse -Filter "Inf2Cat.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+                }
+                if ($ic) { $inf2cat = $ic.FullName }
+              }
+            }
           }
 
           Write-Host "SignTool Path: $signtool" -ForegroundColor Green
