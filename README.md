@@ -157,3 +157,9 @@ Jika setelah instalasi dan restart suara belum keluar:
 
 - Berdasarkan implementasi driver open-source oleh komunitas Chrultrabook & CoolStar.
 - Dilisensikan di bawah [GPL v2 / MIT License](LICENSE).
+
+---
+
+<p align="center">
+  Dibuat dengan ❤️ oleh <b>Muhammad Fikri Dev</b>
+</p>
